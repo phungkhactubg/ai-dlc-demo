@@ -1,0 +1,130 @@
+name: Route Validation (BUG-008 Fix)
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+jobs:
+  route-validation:
+    name: Validate Routes - Prevent Duplicates (BUG-008)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+
+      - name: Run route validation
+        id: validate
+        run: |
+          echo "================================================================================"
+          echo "ROUTE VALIDATION (BUG-008 FIX)"
+          echo "================================================================================"
+          echo "Purpose: Detect and prevent duplicate route definitions"
+          echo "File: .claude/skills/expert-go-backend-developer/scripts/validate_route_controller_mismatch_v2.py"
+          echo ""
+          echo "What this checks:"
+          echo "  1. Duplicate route paths across the entire codebase"
+          echo "  2. Routes without corresponding controller handlers"
+          echo "  3. Misconfigured route-to-controller mappings"
+          echo ""
+          echo "--------------------------------------------------------------------------------"
+          echo "Running validation..."
+          echo "--------------------------------------------------------------------------------"
+          ""
+
+          python .claude/skills/expert-go-backend-developer/scripts/validate_route_controller_mismatch_v2.py
+
+          VALIDATION_EXIT_CODE=$?
+
+          echo ""
+          echo "================================================================================"
+          if [ $VALIDATION_EXIT_CODE -ne 0 ]; then
+            echo "❌ VALIDATION FAILED - CRITICAL"
+            echo "================================================================================"
+            echo ""
+            echo "Duplicate routes or missing controllers detected!"
+            echo ""
+            echo "🔍 TO FIX THESE ISSUES:"
+            echo ""
+            echo "1. Identify duplicate route paths:"
+            echo "   - Review the validation output above for exact duplicate paths"
+            echo "   - Search for duplicate route definitions: grep -r 'Route.*\"/path\"' features/"
+            echo ""
+            echo "2. Remove duplicates:"
+            echo "   - Keep only one handler per unique route path"
+            echo "   - Verify which controller should own the route"
+            echo ""
+            echo "3. Ensure controller exists:"
+            echo "   - If route exists, create corresponding controller method"
+            echo "   - Or remove the route if handler is not needed"
+            echo ""
+            echo "4. Verify route path uniqueness:"
+            echo "   - Each HTTP method + path combination must be unique"
+            echo "   - Example: GET /api/users and POST /api/users are OK"
+            echo "   - But two GET /api/users definitions will FAIL"
+            echo ""
+            echo "🚨 DEPLOYMENT BLOCKED until all route duplicates are resolved!"
+            echo "================================================================================"
+            exit 1
+          else
+            echo "✅ VALIDATION PASSED"
+            echo "================================================================================"
+            echo ""
+            echo "All routes validated successfully:"
+            echo "  ✓ No duplicate route paths found"
+            echo "  ✓ All routes have corresponding controllers"
+            echo "  ✓ All controller mappings are correct"
+            echo ""
+            echo "Code is ready for deployment."
+            echo "================================================================================"
+          fi
+
+      - name: Upload validation results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: route-validation-results
+          path: |
+            route_validation_report.txt
+            route_duplicates_report.txt
+          retention-days: 30
+
+      - name: Comment on PR with results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const result = '${{ steps.validate.outcome }}';
+            const body = result === 'success'
+              ? `✅ **Route Validation Passed**
+              
+              All routes validated successfully. No duplicates or missing controllers detected.
+              
+              This validation prevents BUG-008 (duplicate route definitions) from reoccurring.`
+              : `❌ **Route Validation Failed**
+              
+              Duplicate routes or missing controllers detected! Please review the workflow logs.
+              
+              **Bug Reference:** BUG-008 - Duplicate route definitions
+              
+              Please fix the route issues before merging.`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });

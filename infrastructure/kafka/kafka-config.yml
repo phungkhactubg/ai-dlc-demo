@@ -1,0 +1,41 @@
+# =============================================================================
+# VNPT AV Platform — Kafka Spring Application Config Snippet
+# WP-001 T02
+#
+# Include this in each microservice's application.yml (or import via
+# Spring Cloud Config / ConfigMap).
+# =============================================================================
+spring:
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092,localhost:9093,localhost:9094}
+
+    # ── Producer ────────────────────────────────────────────────────────────
+    producer:
+      acks: all                      # Wait for all in-sync replicas (strongest durability)
+      enable-idempotence: true       # Exactly-once semantics at producer level
+      max-in-flight-requests-per-connection: 5
+      retries: 3
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring.json.add.type.headers: false  # Keep headers clean; use explicit typing
+
+    # ── Consumer ────────────────────────────────────────────────────────────
+    consumer:
+      auto-offset-reset: earliest
+      enable-auto-commit: false      # Manual ack for exactly-once processing
+      isolation-level: read_committed
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.vnpt.avplatform.*"
+
+    # ── Listener container ────────────────────────────────────────────────
+    listener:
+      ack-mode: MANUAL_IMMEDIATE
+      concurrency: 3
+      missing-topics-fatal: false
+
+    # ── Admin (topic management) ──────────────────────────────────────────
+    admin:
+      auto-create: false   # Topics are created by the kafka-init job only

@@ -1,0 +1,29 @@
+# NCS - Test profile: disable infrastructure that requires running services
+spring:
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/av_platform_test
+    redis:
+      host: localhost
+      port: 6379
+  kafka:
+    bootstrap-servers: localhost:9092
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.mongo.MongoDataAutoConfiguration
+      - org.springframework.boot.autoconfigure.mongo.MongoAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+
+firebase:
+  enabled: false
+
+app:
+  security:
+    jwt-secret: test-secret-key-must-be-at-least-32-characters-long
+    access-token-expiration-ms: 900000
+
+logging:
+  level:
+    root: WARN
+    com.vnpt.avplatform: DEBUG

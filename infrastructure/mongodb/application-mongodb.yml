@@ -1,0 +1,16 @@
+# =============================================================================
+# VNPT AV Platform — MongoDB Spring Application Config Snippet
+# WP-001 T04
+# =============================================================================
+spring:
+  data:
+    mongodb:
+      uri: ${MONGODB_URI:mongodb://mongo1:27017,mongo2:27018,mongo3:27019/av_platform_prod?replicaSet=rs0}
+      auto-index-creation: false   # All indexes are managed by replica-set-init.js
+
+      # Connection pool
+      # Tuned for 8 microservices sharing the same MongoDB cluster
+      uuid-representation: standard
+
+# Transactions require replica set — enabled in Spring via:
+# MongoTransactionManager bean (see SharedMongoConfig)

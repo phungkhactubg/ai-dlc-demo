@@ -1,0 +1,182 @@
+---
+# =============================================================================
+# VNPT AV Platform — TMS Deployment Template
+# WP-001 T07
+#
+# This is the canonical deployment template. All other services follow
+# the same structure — replace service name, image, and port references.
+# =============================================================================
+
+# ── ConfigMap (environment-specific config) ───────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tms-config
+  namespace: av-platform
+  labels:
+    app: tms
+    app.kubernetes.io/name: tms
+    app.kubernetes.io/part-of: av-platform
+data:
+  KAFKA_BOOTSTRAP_SERVERS: "kafka1:9092,kafka2:9093,kafka3:9094"
+  REDIS_HOST: "redis-headless.av-platform.svc.cluster.local"
+  REDIS_PORT: "6379"
+  MONGODB_URI: "mongodb://mongo1:27017,mongo2:27018,mongo3:27019/av_platform_prod?replicaSet=rs0"
+  JAVA_OPTS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Djava.security.egd=file:/dev/./urandom"
+  SPRING_PROFILES_ACTIVE: "prod"
+
+---
+
+# ── Deployment ────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tms
+  namespace: av-platform
+  labels:
+    app: tms
+    app.kubernetes.io/name: tms
+    app.kubernetes.io/version: "latest"
+    app.kubernetes.io/part-of: av-platform
+    app.kubernetes.io/component: backend
+spec:
+  replicas: 2      # Initial replicas; HPA manages scaling
+  selector:
+    matchLabels:
+      app: tms
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: tms
+        app.kubernetes.io/name: tms
+        version: "latest"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/actuator/prometheus"
+    spec:
+      # ── Security context (run as non-root) ──────────────────────────────────
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+
+      # ── Graceful shutdown ────────────────────────────────────────────────────
+      terminationGracePeriodSeconds: 30
+
+      containers:
+        - name: tms
+          image: gcr.io/vnpt-av-platform/tms:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+
+          # ── Environment from ConfigMap ────────────────────────────────────────
+          envFrom:
+            - configMapRef:
+                name: tms-config
+
+          # ── Sensitive values from Secrets ──────────────────────────────────────
+          env:
+            - name: MONGODB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: tms-secrets
+                  key: mongodb-username
+            - name: MONGODB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: tms-secrets
+                  key: mongodb-password
+            - name: JWT_PUBLIC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: platform-jwt-secrets
+                  key: public-key
+
+          # ── Resource requests & limits (ARCHITECTURE_SPEC) ────────────────────
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+
+          # ── Health probes ────────────────────────────────────────────────────
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          # ── Container security context ────────────────────────────────────────
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+
+          # ── Writable temp directories ─────────────────────────────────────────
+          volumeMounts:
+            - name: tmp-dir
+              mountPath: /tmp
+
+      volumes:
+        - name: tmp-dir
+          emptyDir: {}
+
+      # ── Pod scheduling ────────────────────────────────────────────────────────
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - tms
+                topologyKey: kubernetes.io/hostname
+
+---
+
+# ── Service (ClusterIP) ───────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: tms-service
+  namespace: av-platform
+  labels:
+    app: tms
+    app.kubernetes.io/name: tms
+    app.kubernetes.io/part-of: av-platform
+spec:
+  type: ClusterIP
+  selector:
+    app: tms
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8080
+      targetPort: http

@@ -1,0 +1,10 @@
+spring:
+  data:
+    mongodb:
+      uri: ${MONGODB_URI:mongodb://mongo-staging:27017/av_platform_staging?replicaSet=rs0}
+
+logging:
+  level:
+    com.vnpt.avplatform: INFO
+    org.springframework.data.mongodb: WARN
+    org.springframework.kafka: WARN

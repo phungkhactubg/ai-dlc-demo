@@ -1,0 +1,58 @@
+{
+  "name": "expert-java-backend-developer",
+  "description": "A specialized skill for backend development using Java 17+ and Spring Boot 3+, following strict architectural guidelines and best practices.",
+  "author": "av-platform",
+  "version": "1.0.0",
+  "entry_point": "skill.py",
+  "commands": {
+    "/validate": {
+      "description": "Validate Java backend code against production standards",
+      "usage": "/validate <path>"
+    },
+    "/analyze": {
+      "description": "Analyze Java code for complexity, dependencies, and architecture",
+      "usage": "/analyze <path>"
+    },
+    "/test": {
+      "description": "Run comprehensive tests and quality checks",
+      "usage": "/test <path>"
+    },
+    "/scaffold": {
+      "description": "Generate a new feature module with standard structure",
+      "usage": "/scaffold <feature_name>"
+    }
+  },
+  "permissions": {
+    "allow": [
+      "Read",
+      "Grep",
+      "Glob",
+      "Bash",
+      "Write",
+      "Edit"
+    ],
+    "deny": []
+  },
+  "settings": {
+    "tech_stack": {
+      "java_version": "17+",
+      "framework": "Spring Boot 3.2+",
+      "build": "Maven 3.9+ or Gradle 8.x",
+      "databases": ["PostgreSQL", "MongoDB", "Redis"],
+      "messaging": ["Kafka", "RabbitMQ", "NATS"],
+      "auth": "Keycloak (JWT)"
+    },
+    "standards": {
+      "interface_first": true,
+      "constructor_injection": true,
+      "transaction_boundary": true,
+      "bean_validation": true,
+      "exception_handling": true,
+      "null_safety": true
+    },
+    "max_complexity": 15,
+    "max_method_lines": 50,
+    "max_class_lines": 500,
+    "quality_score_threshold": 60
+  }
+}

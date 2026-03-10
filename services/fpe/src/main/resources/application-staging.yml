@@ -1,0 +1,15 @@
+# Staging profile — mirrors production topology with staging endpoints
+spring:
+  data:
+    mongodb:
+      uri: ${MONGODB_URI:mongodb://mongo-staging:27017/av_platform_staging?replicaSet=rs0}
+    redis:
+      host: ${REDIS_HOST:redis-staging}
+      port: ${REDIS_PORT:6379}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka-staging:9092}
+
+logging:
+  level:
+    com.vnpt.avplatform: INFO
+    org.springframework.kafka: WARN

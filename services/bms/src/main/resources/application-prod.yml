@@ -1,0 +1,20 @@
+# BMS - Production profile overrides
+logging:
+  level:
+    com.vnpt.avplatform: WARN
+    root: WARN
+
+server:
+  port: ${SERVER_PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus,metrics
+
+influxdb:
+  url: ${INFLUXDB_URL}
+  token: ${INFLUXDB_TOKEN}
+  org: ${INFLUXDB_ORG}
+  bucket: ${INFLUXDB_BUCKET:av-platform-metering}

@@ -1,0 +1,17 @@
+# BMS - Development profile overrides
+logging:
+  level:
+    com.vnpt.avplatform: DEBUG
+    org.springframework.data.mongodb: DEBUG
+    org.springframework.kafka: DEBUG
+
+spring:
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/av_platform_dev
+
+influxdb:
+  url: http://localhost:8086
+  token: dev-token
+  org: vnpt-av
+  bucket: av-platform-metering-dev

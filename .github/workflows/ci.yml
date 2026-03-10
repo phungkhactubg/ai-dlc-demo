@@ -1,0 +1,202 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  build:
+    name: Build and Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.5'
+          cache: true
+
+      - name: Install dependencies
+        run: |
+          go mod download
+          go mod verify
+
+      - name: Build
+        run: |
+          go build -v ./...
+
+      - name: Run tests
+        run: |
+          go test -v -race -coverprofile=coverage.out ./...
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.out
+          fail_ci_if_error: false
+
+  validate-routes:
+    name: Validate Routes (Prevents Duplicates - BUG-008)
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+
+      - name: Run route validation
+        run: |
+          echo "=========================================="
+          echo "ROUTE VALIDATION (BUG-008 FIX)"
+          echo "=========================================="
+          echo "Validating routes to prevent duplicate definitions..."
+          echo ""
+
+          python .claude/skills/expert-go-backend-developer/scripts/validate_route_controller_mismatch_v2.py
+
+          VALIDATION_EXIT_CODE=$?
+
+          echo ""
+          echo "=========================================="
+          if [ $VALIDATION_EXIT_CODE -ne 0 ]; then
+            echo "CRITICAL: Route validation failed!"
+            echo "Duplicate or missing controller mappings detected."
+            echo ""
+            echo "Please fix the following issues:"
+            echo "1. Remove duplicate route definitions"
+            echo "2. Ensure all routes have corresponding controllers"
+            echo "3. Verify route paths are unique"
+            echo ""
+            echo "Review the validation output above for details."
+            echo "=========================================="
+            exit 1
+          else
+            echo "SUCCESS: All routes validated successfully"
+            echo "No duplicates or missing controllers found"
+            echo "=========================================="
+          fi
+        shell: bash
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: validate-routes
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Gosec Security Scanner
+        uses: securego/gosec@master
+        with:
+          args: ./...
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run security validator
+        run: |
+          for feature in features/*/; do
+            if [ -d "$feature" ]; then
+              echo "Scanning $feature for security issues..."
+              python .claude/skills/expert-go-backend-developer/scripts/validate_security.py "$feature" || echo "Security scan warnings in $feature"
+            fi
+          done
+        continue-on-error: true
+
+  code-quality:
+    name: Code Quality Checks
+    runs-on: ubuntu-latest
+    needs: validate-routes
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.5'
+          cache: true
+
+      - name: Run gofmt
+        run: |
+          test -z $(gofmt -s -l . | tee /dev/stderr) || (echo "Code is not formatted. Run 'gofmt -s -w .'" && exit 1)
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run production ready validator
+        run: |
+          for feature in features/*/; do
+            if [ -d "$feature" ]; then
+              echo "Checking $feature for production readiness..."
+              python .claude/skills/expert-go-backend-developer/scripts/validate_production_ready.py "$feature"
+            fi
+          done
+
+      - name: Check for context.TODO
+        run: |
+          echo "Checking for context.TODO() in production code..."
+          RESULT=$(grep -r "context.TODO()" features/ --include="*.go" | grep -v "_test.go" || true)
+          if [ -n "$RESULT" ]; then
+            echo "CRITICAL: Found context.TODO() in production code:"
+            echo "$RESULT"
+            echo "context.TODO() is a deployment blocker. Please replace with proper context."
+            exit 1
+          else
+            echo "PASS: No context.TODO() found in production code"
+          fi
+
+      - name: Check for TODOs and placeholders
+        run: |
+          echo "Checking for TODOs, FIXMEs, and placeholders..."
+          RESULT=$(grep -rE "TODO|FIXME|XXX|HACK|placeholder" features/ --include="*.go" | grep -v "_test.go" | grep -v "^\s*//" || true)
+          if [ -n "$RESULT" ]; then
+            echo "WARNING: Found TODOs or placeholders in production code:"
+            echo "$RESULT"
+            echo "Please resolve before production deployment."
+          else
+            echo "PASS: No TODOs or placeholders found"
+          fi
+
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    needs: [build, validate-routes, security-scan, code-quality]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to staging
+        run: |
+          echo "Deploying to staging environment..."
+          # Add deployment commands here
+
+      - name: Run smoke tests
+        run: |
+          echo "Running smoke tests..."
+          # Add smoke test commands here

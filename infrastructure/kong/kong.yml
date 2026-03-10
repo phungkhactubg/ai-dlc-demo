@@ -1,0 +1,274 @@
+_format_version: "3.0"
+_transform: true
+
+# =============================================================================
+# VNPT AV Platform — Kong API Gateway Declarative Configuration
+# WP-001 T06 | DB-less mode
+# =============================================================================
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SERVICES
+# ─────────────────────────────────────────────────────────────────────────────
+services:
+
+  # ── TMS — Tenant Management Service ────────────────────────────────────────
+  - name: tms-service
+    url: http://tms-service:8080
+    connect_timeout: 2000
+    write_timeout: 5000
+    read_timeout: 5000
+    routes:
+      - name: tms-route
+        paths:
+          - /api/v1/tenants
+        strip_path: false
+        preserve_host: false
+        protocols: [http, https]
+    plugins:
+      - name: jwt
+        config:
+          key_claim_name: kid
+          algorithms: [RS256]
+          run_on_preflight: false
+      - name: rate-limiting
+        config:
+          minute: 1000
+          policy: local
+          limit_by: consumer
+          error_message: "API rate limit exceeded. Retry after 60 seconds."
+      - name: request-transformer
+        config:
+          add:
+            headers:
+              - "X-Kong-Proxy:true"
+
+  # ── RHS — Ride Hailing Service ──────────────────────────────────────────────
+  - name: rhs-service
+    url: http://rhs-service:8080
+    connect_timeout: 2000
+    write_timeout: 5000
+    read_timeout: 5000
+    routes:
+      - name: rhs-route
+        paths:
+          - /api/v1/rides
+        strip_path: false
+        preserve_host: false
+        protocols: [http, https]
+    plugins:
+      - name: jwt
+        config:
+          key_claim_name: kid
+          algorithms: [RS256]
+          run_on_preflight: false
+      - name: rate-limiting
+        config:
+          minute: 1000
+          policy: local
+          limit_by: consumer
+      - name: request-transformer
+        config:
+          add:
+            headers:
+              - "X-Kong-Proxy:true"
+
+  # ── FPE — Fare & Pricing Engine ─────────────────────────────────────────────
+  - name: fpe-service
+    url: http://fpe-service:8080
+    connect_timeout: 2000
+    write_timeout: 5000
+    read_timeout: 5000
+    routes:
+      - name: fpe-route
+        paths:
+          - /api/v1/fares
+        strip_path: false
+        preserve_host: false
+        protocols: [http, https]
+    plugins:
+      - name: jwt
+        config:
+          key_claim_name: kid
+          algorithms: [RS256]
+          run_on_preflight: false
+      - name: rate-limiting
+        config:
+          minute: 1000
+          policy: local
+          limit_by: consumer
+      - name: request-transformer
+        config:
+          add:
+            headers:
+              - "X-Kong-Proxy:true"
+
+  # ── PAY — Payment Service (PCI-DSS isolated) ────────────────────────────────
+  - name: pay-service
+    url: http://pay-service.pay-namespace:8080   # Cross-namespace routing in K8s
+    connect_timeout: 2000
+    write_timeout: 5000
+    read_timeout: 5000
+    routes:
+      - name: pay-route
+        paths:
+          - /api/v1/payments
+        strip_path: true
+        preserve_host: false
+        protocols: [http, https]
+    plugins:
+      - name: jwt
+        config:
+          key_claim_name: kid
+          algorithms: [RS256]
+          run_on_preflight: false
+      - name: rate-limiting
+        config:
+          minute: 1000
+          policy: local
+          limit_by: consumer
+      - name: request-transformer
+        config:
+          add:
+            headers:
+              - "X-Kong-Proxy:true"
+
+  # ── BMS — Billing & Metering Service ───────────────────────────────────────
+  - name: bms-service
+    url: http://bms-service:8080
+    connect_timeout: 2000
+    write_timeout: 5000
+    read_timeout: 5000
+    routes:
+      - name: bms-route
+        paths:
+          - /api/v1/billing
+        strip_path: false
+        preserve_host: false
+        protocols: [http, https]
+    plugins:
+      - name: jwt
+        config:
+          key_claim_name: kid
+          algorithms: [RS256]
+          run_on_preflight: false
+      - name: rate-limiting
+        config:
+          minute: 1000
+          policy: local
+          limit_by: consumer
+      - name: request-transformer
+        config:
+          add:
+            headers:
+              - "X-Kong-Proxy:true"
+
+  # ── NCS — Notification & Communication Service ──────────────────────────────
+  - name: ncs-service
+    url: http://ncs-service:8080
+    connect_timeout: 2000
+    write_timeout: 5000
+    read_timeout: 5000
+    routes:
+      - name: ncs-route
+        paths:
+          - /api/v1/notifications
+        strip_path: false
+        preserve_host: false
+        protocols: [http, https]
+    plugins:
+      - name: jwt
+        config:
+          key_claim_name: kid
+          algorithms: [RS256]
+          run_on_preflight: false
+      - name: rate-limiting
+        config:
+          minute: 1000
+          policy: local
+          limit_by: consumer
+      - name: request-transformer
+        config:
+          add:
+            headers:
+              - "X-Kong-Proxy:true"
+
+  # ── ABI — Analytics & Business Intelligence ─────────────────────────────────
+  - name: abi-service
+    url: http://abi-service:8080
+    connect_timeout: 2000
+    write_timeout: 5000
+    read_timeout: 5000
+    routes:
+      - name: abi-route
+        paths:
+          - /api/v1/analytics
+        strip_path: false
+        preserve_host: false
+        protocols: [http, https]
+    plugins:
+      - name: jwt
+        config:
+          key_claim_name: kid
+          algorithms: [RS256]
+          run_on_preflight: false
+      - name: rate-limiting
+        config:
+          minute: 1000
+          policy: local
+          limit_by: consumer
+      - name: request-transformer
+        config:
+          add:
+            headers:
+              - "X-Kong-Proxy:true"
+
+  # ── MKP — Marketplace Service ───────────────────────────────────────────────
+  - name: mkp-service
+    url: http://mkp-service:8080
+    connect_timeout: 2000
+    write_timeout: 5000
+    read_timeout: 5000
+    routes:
+      - name: mkp-route
+        paths:
+          - /api/v1/marketplace
+        strip_path: false
+        preserve_host: false
+        protocols: [http, https]
+    plugins:
+      - name: jwt
+        config:
+          key_claim_name: kid
+          algorithms: [RS256]
+          run_on_preflight: false
+      - name: rate-limiting
+        config:
+          minute: 1000
+          policy: local
+          limit_by: consumer
+      - name: request-transformer
+        config:
+          add:
+            headers:
+              - "X-Kong-Proxy:true"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GLOBAL PLUGINS
+# ─────────────────────────────────────────────────────────────────────────────
+plugins:
+  # Prometheus metrics — /metrics endpoint on port 8001
+  - name: prometheus
+    enabled: true
+    config:
+      per_consumer: true
+      status_code_metrics: true
+      latency_metrics: true
+      bandwidth_metrics: true
+
+  # Distributed tracing correlation ID
+  - name: correlation-id
+    enabled: true
+    config:
+      header_name: X-Trace-ID
+      generator: uuid
+      echo_downstream: true

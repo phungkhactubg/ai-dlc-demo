@@ -1,0 +1,92 @@
+---
+# =============================================================================
+# VNPT AV Platform — NetworkPolicy: pay-namespace PCI-DSS Isolation
+# WP-001 T07
+#
+# Deny ALL ingress to pay-namespace except from the Kong gateway namespace.
+# Egress is unrestricted to allow PAY to call MongoDB, Kafka, Redis, PAY-gateway.
+# =============================================================================
+
+# Deny all ingress by default — only Kong can reach PAY pods
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pay-deny-all-ingress
+  namespace: pay-namespace
+  labels:
+    app.kubernetes.io/part-of: av-platform
+    pci-dss: "true"
+spec:
+  podSelector: {}    # Applies to ALL pods in pay-namespace
+  policyTypes:
+    - Ingress
+  ingress:
+    # Allow traffic only from Kong gateway namespace
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: kong-gateway
+      ports:
+        - protocol: TCP
+          port: 8080
+
+---
+
+# Allow PAY to communicate only with required downstream services (egress)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pay-egress-allow
+  namespace: pay-namespace
+  labels:
+    app.kubernetes.io/part-of: av-platform
+    pci-dss: "true"
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    # MongoDB replica set
+    - ports:
+        - protocol: TCP
+          port: 27017
+    # Kafka brokers
+    - ports:
+        - protocol: TCP
+          port: 9092
+        - protocol: TCP
+          port: 9093
+        - protocol: TCP
+          port: 9094
+    # Redis
+    - ports:
+        - protocol: TCP
+          port: 6379
+    # DNS resolution
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+---
+
+# Deny all ingress to av-platform namespace from pay-namespace
+# Prevents PAY from calling other services directly (must go through events)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: block-pay-namespace-ingress
+  namespace: av-platform
+  labels:
+    app.kubernetes.io/part-of: av-platform
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchExpressions:
+              - key: pci-dss
+                operator: DoesNotExist

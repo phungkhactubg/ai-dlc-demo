@@ -1,0 +1,18 @@
+# NCS - Production profile overrides
+logging:
+  level:
+    com.vnpt.avplatform: WARN
+    root: WARN
+
+server:
+  port: ${SERVER_PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus,metrics
+
+firebase:
+  enabled: ${FIREBASE_ENABLED:true}
+  credentials-path: ${FIREBASE_CREDENTIALS_PATH}

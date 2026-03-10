@@ -1,0 +1,31 @@
+# =============================================================================
+# VNPT AV Platform — Redis Spring Application Config Snippet
+# WP-001 T05
+# =============================================================================
+spring:
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 20    # Max connections in pool
+          max-idle: 10
+          min-idle: 2
+          max-wait: 1000ms  # Max time to wait for a connection
+
+# Cache configuration (used by @Cacheable annotations)
+spring.cache:
+  type: redis
+  redis:
+    time-to-live: 300s           # Default TTL; overridden per cache name below
+    cache-null-values: false
+
+# Per-cache TTL overrides (configure in RedisConfig bean if needed)
+# idempotency caches: 86400s (24h)
+# quota caches:       until end of billing period (computed at write time)
+# session caches:     3600s (1h)
+# fare estimate:      60s
+# surge:              60s
+# tenant context:     300s

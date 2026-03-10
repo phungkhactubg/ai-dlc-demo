@@ -1,0 +1,81 @@
+---
+# =============================================================================
+# VNPT AV Platform — ResourceQuotas
+# WP-001 T07
+# =============================================================================
+
+# ── av-platform namespace ────────────────────────────────────────────────────
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: av-platform-quota
+  namespace: av-platform
+spec:
+  hard:
+    requests.cpu: "8"
+    requests.memory: 16Gi
+    limits.cpu: "32"
+    limits.memory: 64Gi
+    pods: "100"
+    services: "20"
+    persistentvolumeclaims: "20"
+    count/deployments.apps: "20"
+
+---
+
+# ── pay-namespace (PCI-DSS isolated) ────────────────────────────────────────
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: pay-namespace-quota
+  namespace: pay-namespace
+spec:
+  hard:
+    requests.cpu: "2"
+    requests.memory: 4Gi
+    limits.cpu: "8"
+    limits.memory: 16Gi
+    pods: "20"
+    services: "5"
+    count/deployments.apps: "5"
+
+---
+
+# ── LimitRange — default pod resource limits ─────────────────────────────────
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: av-platform-limits
+  namespace: av-platform
+spec:
+  limits:
+    - type: Container
+      default:
+        cpu: "500m"
+        memory: "512Mi"
+      defaultRequest:
+        cpu: "100m"
+        memory: "128Mi"
+      max:
+        cpu: "4"
+        memory: "8Gi"
+
+---
+
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: pay-namespace-limits
+  namespace: pay-namespace
+spec:
+  limits:
+    - type: Container
+      default:
+        cpu: "500m"
+        memory: "512Mi"
+      defaultRequest:
+        cpu: "250m"
+        memory: "256Mi"
+      max:
+        cpu: "2"
+        memory: "4Gi"

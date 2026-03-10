@@ -1,0 +1,11 @@
+# Production profile — minimal logging, hardened settings
+logging:
+  level:
+    com.vnpt.avplatform: WARN
+    root: WARN
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus,metrics

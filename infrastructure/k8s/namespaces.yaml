@@ -1,0 +1,29 @@
+---
+# =============================================================================
+# VNPT AV Platform — Kubernetes Namespaces
+# WP-001 T07
+# =============================================================================
+
+# av-platform: all services except PAY
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: av-platform
+  labels:
+    name: av-platform
+    app.kubernetes.io/managed-by: kubectl
+    environment: production
+
+---
+
+# pay-namespace: PCI-DSS isolated namespace — PAY service only
+# NetworkPolicy enforces that only Kong can reach pods in this namespace.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pay-namespace
+  labels:
+    name: pay-namespace
+    pci-dss: "true"
+    app.kubernetes.io/managed-by: kubectl
+    environment: production

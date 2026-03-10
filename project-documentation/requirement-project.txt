@@ -1,0 +1,223 @@
+Project Name: Nền tảng cung cấp dịch vụ dùng chung (Services Provider) cho AV (Autonomous Vehicle) và UAV (Unmanned Aerial Vehicle )
+A. Mô tả chung: Các thành phần thuộc nhóm Services Provider giúp VNPT AV Platform cung cấp các tính năng, dịch vụ như một nền tảng dịch vụ quản lý người dùng, doanh nghiệp và đặt dịch vụ, thanh toán, quản lý subscription,....
+- Mô hình C4: context.png, containers.png, service_provider_overview.png
+B. Mô tả chi tiết các thành phần trong Services Provider:
+I. RHS Service (Ride-Hailing Service): Dịch Vụ Đặt Xe tự hành
+1. Tổng quan
+- RHS Service là phân hệ kinh doanh chính thuộc nhóm Service Provider (Nhóm cung cấp dịch vụ). Các phân hệ như VMS hay AOC tập trung vào việc giám sát, quản lý và vận hành đội xe, RHS Service đóng vai trò mang lại doanh thu bằng cách biến nền tảng VNPT AV Platform thành một ứng dụng gọi xe tự hành (tương tự Uber, Grab nhưng dành riêng cho xe không người lái).
+- Phân hệ này chịu trách nhiệm quản lý toàn bộ vòng đời của một chuyến đi, từ lúc người dùng mở ứng dụng yêu cầu đặt xe, cho đến khi họ xuống xe và hoàn thành chuyến đi.
+- Mô hình C4: rhs_details.png
+2. Chức năng: Vì đặc thù phục vụ xe không người lái, RHS Service cung cấp các nhóm chức năng thông minh và phức tạp hơn so với các ứng dụng gọi xe truyền thống:
+- Quản lý vòng đời chuyến đi (Trip Lifecycle Management):
+	+ Xử lý các luồng yêu cầu đặt xe, hủy chuyến, lên lịch đặt trước (Scheduled Rides) và xem lịch sử di chuyển.
+	+ Quản lý một Trip State Machine cực kỳ chi tiết, theo dõi sát sao từng bước của xe tự hành: Requested (Đã yêu cầu) → Matched (Đã ghép xe) → Vehicle_Enroute (Xe đang đến) → Arrived (Đã đến điểm đón) → Boarding (Hành khách đang lên xe) → In_Progress (Đang di chuyển) → Alighting (Hành khách đang xuống) → Completed (Hoàn thành). Hệ thống cũng tính đến các trạng thái ngoại lệ như Remote_Intervention (Can thiệp từ xa) hay Safety_Stop (Dừng an toàn).
+- AV-Aware Matching: Khác với việc chỉ tìm xe gần nhất, thuật toán ghép xe của RHS đánh giá dựa trên nhiều yếu tố đặc thù của xe tự hành (AV) bao gồm: mức pin hiện tại, loại xe, và đặc biệt là tính tương thích với vùng ODD (đảm bảo xe được phép chạy ở khu vực người dùng yêu cầu).
+- Dự đoán thời gian chính xác (ETA Engine): Sử dụng mô hình học máy (LSTM/GBM) dựa trên dữ liệu lịch sử chuyến đi, kết hợp với bản đồ HD (từ phân hệ HML), lưu lượng giao thông trực tiếp và hồ sơ tốc độ của xe tự hành để tính toán ETA (Thời gian dự kiến đến) một cách chính xác nhất.
+- Đi chung xe (Ride Pooling): Hỗ trợ tính năng ghép nhiều hành khách có cùng tuyến đường vào một chuyến xe, sử dụng thuật toán tối ưu hóa (Pooling Optimizer) nhằm giảm thiểu quãng đường đi vòng (detour) trong khi vẫn tuân thủ các ràng buộc thời gian.
+- Đánh giá chất lượng xe (Rating Service): Thu thập đánh giá của hành khách sau chuyến đi về các tiêu chí như: độ sạch sẽ, mức độ an toàn và sự thoải mái (vì không có tài xế để đánh giá). Dữ liệu này được dùng để chấm điểm chất lượng cho từng chiếc xe.
+- Mô hình C4 luồng đặt xe: ride_booking_flow.png
+3. Công nghệ:
+- Ngôn ngữ & Framework: Khác với lõi hệ thống quản lý xe dùng Go, RHS Service được xây dựng trên nền tảng Java và Spring Boot - tiêu chuẩn của các hệ thống giao dịch quy mô lớn (Enterprise).
+- Dữ liệu & Caching: Sử dụng MongoDB để lưu trữ thông tin chuyến đi linh hoạt và dùng Redis để cache các trạng thái ghép xe hoặc ETA thời gian thực.
+- Truyền tải sự kiện: RHS là trung tâm kết nối, nó publish các sự kiện thay đổi trạng thái lên Kafka để các phân hệ khác (như tính tiền, phân tích) nắm bắt, đồng thời sử dụng NATS để đẩy (push) cập nhật trạng thái chuyến đi trực tiếp (live updates) xuống ứng dụng di động của người dùng với độ trễ cực thấp.
+
+II. FPE Service (Fare & Pricing Engine): Hệ Thống Định Giá & Cước Phí
+1. Tổng quan:
+- FPE Service là phân hệ định giá và tính cước cốt lõi thuộc nhóm Service Provider (Nhóm cung cấp dịch vụ) của hệ thống VNPT AV Platform. Phân hệ này chịu trách nhiệm quản lý toàn bộ logic liên quan đến tiền cước, tính toán giá trị chuyến đi một cách linh hoạt dựa trên nhiều yếu tố như: nhu cầu thị trường thời gian thực, khoảng cách, thời gian di chuyển, loại xe tự hành và các hợp đồng đặc thù dành cho khách hàng doanh nghiệp.
+- Đóng vai trò hệ thống tính toán doanh thu thông minh, FPE đảm bảo nền tảng có thể tối ưu hóa doanh thu thông qua cơ chế giá động (dynamic pricing) tương tự như Uber hay Grab, đồng thời cung cấp khả năng cá nhân hóa bảng giá cho các đối tác tích hợp (Tenant).
+- Mô hình C4: fpe-details.png
+2. Chức năng: Phân hệ FPE cung cấp các tính năng nghiệp vụ tài chính và định giá phức tạp:
+- Tính giá cước động & Khóa giá (Dynamic & Upfront Pricing):
+	+ Sử dụng Thuật toán Dynamic Fare để tính toán cước phí cấu thành từ các yếu tố: phí cơ bản (base fee) + khoảng cách + thời gian, kết hợp với phân cấp theo loại xe (vehicle-type tiers).
+	+ Hỗ trợ cơ chế Upfront Pricing (Khóa giá): Tính toán và chốt mức giá cố định cho hành khách ngay tại thời điểm yêu cầu đặt xe, giúp khách hàng không bị ảnh hưởng bởi các sai lệch lộ trình phát sinh trong quá trình xe tự hành di chuyển.
+- Giá tăng theo nhu cầu (Surge Pricing):
+	+ Dựa trên tỷ lệ cung - cầu thực tế để đưa ra hệ số nhân giá (multiplier) từ 1.0x đến 3.0x.
+	+ Tích hợp với dữ liệu dự đoán nhu cầu (demand data) từ phân hệ Fleet Optimization để điều chỉnh mức surge một cách thông minh, có áp dụng các mức trần (configurable caps) để bảo vệ người dùng cuối.
+- Bảng giá Doanh nghiệp (Enterprise Rate Cards):
+	+ Cung cấp tính năng Rate Card cho phép thiết lập bảng giá tùy chỉnh riêng cho từng khách hàng doanh nghiệp (Tenant).
+	+ Hỗ trợ các mô hình định giá B2B như: giá cước đồng giá (flat rates), chiết khấu theo sản lượng (volume discounts), và giới hạn chi tiêu hàng tháng (monthly caps).
+- Quản lý Khuyến mãi (Promotion Management): Hỗ trợ tạo lập và quản lý các chiến dịch khuyến mãi bao gồm: mã giảm giá (coupons), giảm giá chuyến đi đầu tiên, khuyến mãi theo khu vực (zone promotions) và điểm thưởng giới thiệu (referral credits).
+- Chia sẻ Cước & Doanh thu (Fare Split & Revenue Share):
+	+ Fare Split Service: Cho phép chia sẻ tiền cước giữa nhiều hành khách đi chung xe với tỷ lệ tùy chỉnh.
+	+ Revenue Share Service: Tự động tính toán mức chia sẻ doanh thu giữa nền tảng VNPT AV Platform và các khách hàng doanh nghiệp (Platform fee vs. Enterprise take-rate) dựa trên cấu hình linh hoạt.
+3. Công nghệ:
+- Ngôn ngữ & Framework: Tương tự các phân hệ Service Provider khác, FPE được xây dựng bằng Java và Spring Boot chuyên phục vụ cho các hệ thống Enterprise lớn.
+- Lưu trữ & Caching:
+	+ Sử dụng MongoDB để lưu trữ lịch sử cước phí, các mã khuyến mãi và bảng giá doanh nghiệp linh hoạt.
+	+ Sử dụng Redis để lưu vào bộ nhớ cache (caching) các ước tính giá và trạng thái surge pricing thời gian thực, giúp giảm tải và phản hồi siêu tốc độ.
+	+ Sử dụng Kafka Adapter để phát các sự kiện thay đổi giá và cập nhật surge pricing.
+- Tích hợp với các phân hệ khác:
+	+ RHS Service (Đặt xe): RHS gọi FPE để ước tính giá cước lúc người dùng đặt xe và tính giá cuối cùng khi hoàn thành chuyến đi.
+	+ HML Service (Bản đồ): FPE truy vấn HML để lấy thông tin định giá theo khu vực (zone pricing data) và khoảng cách di chuyển.
+	+ Fleet Optimization: Cung cấp dữ liệu bản đồ nhiệt (heatmaps) và nhu cầu đặt xe để FPE tính toán chỉ số Surge.
+
+III. BMS Service (Billing & Subscription Management): Hệ Thống Quản Lý Thanh Toán & Gói Dịch Vụ
+1. Tổng quan: 
+- BMS Service là phân hệ quản lý tài chính doanh nghiệp cốt lõi thuộc nhóm Service Provider của VNPT AV Platform. Nếu FPE Service lo việc tính tiền từng chuyến đi cho hành khách, thì BMS Service hoạt động tương tự như hệ thống AWS Billing, chịu trách nhiệm quản lý dòng tiền từ các khách hàng doanh nghiệp (Enterprise Clients/Tenants) thuê nền tảng.
+- Phân hệ này tự động hóa toàn bộ quy trình từ việc doanh nghiệp đăng ký gói dịch vụ (Subscription), đo lường tài nguyên sử dụng thực tế (Metering API/Storage), cho đến khi xuất hóa đơn và quản lý hạn mức.
+- Mô hình C4: bms-details.png
+2. Chức năng: BMS Service cung cấp các nhóm chức năng chuyên sâu về kế toán và quản lý dịch vụ đám mây:
+- Quản lý Gói dịch vụ (Subscription & Plan Management):
+	+ Quản lý vòng đời của các gói đăng ký dịch vụ (ví dụ: Starter, Growth, Enterprise) với các chu kỳ thanh toán linh hoạt (hàng tháng/hàng năm) và các bản dùng thử (Trial).
+	+ Quản lý phân quyền tính năng (Feature flags) và quyền lợi đi kèm dựa trên cấp độ của từng gói dịch vụ.
+- Đo lường & Quản lý Hạn mức sử dụng (Metering & Quota Management):
+	+ Metering: Liên tục theo dõi và đo lường mức sử dụng tài nguyên của từng doanh nghiệp, bao gồm: số lượng API calls, số chuyến đi (rides), số km di chuyển và dung lượng lưu trữ (storage).
+	+ Quota: Thực thi các giới hạn tài nguyên (như giới hạn số lượng xe tối đa, rate limits API) và chặn các yêu cầu vượt quá hạn ngạch cho phép.
+- Quản lý Hóa đơn & Thuế (Invoicing & Tax Calculation):
+	+ Tự động tổng hợp dữ liệu đo lường và xuất hóa đơn định kỳ với các bảng kê chi tiết từng khoản mục (line-item breakdown).
+	+ Tự động tính toán các loại thuế phức tạp (như VAT, GST) dựa trên quy định pháp lý của khu vực mà doanh nghiệp hoạt động.
+- Phân tích Chi phí & Quản lý Tín dụng (Cost Explorer & Credit System):
+	+ Cung cấp bảng điều khiển (Dashboard) phân tích chi tiêu, đưa ra dự báo chi phí (forecast) và tự động gửi cảnh báo khi doanh nghiệp tiêu vượt ngân sách (budget alerts).
+	+ Quản lý hệ thống ví tín dụng (Credits), bao gồm tiền trả trước (pre-paid), tín dụng khuyến mãi hoặc tín dụng dùng thử.
+3. Công nghệ:
+- Công nghệ lõi: Tương tự các service nhóm Provider, BMS được xây dựng bằng Java và Spring Boot.
+- Lưu trữ & Caching:
+	+ Sử dụng MongoDB để lưu trữ thông tin hóa đơn, lịch sử gia hạn và chi tiết các gói dịch vụ.
+	+ Sử dụng InfluxDB kết hợp với MongoDB để lưu trữ chuỗi dữ liệu đo lường (Usage metrics) theo thời gian của từng tenant.
+	+ Sử dụng Redis để lưu vào bộ nhớ cache các biến đếm đo lường (metering counters) và hạn ngạch nhằm kiểm tra siêu tốc.
+- Tương tác luồng nghiệp vụ:
+	+ Giao tiếp với PAY Service: BMS gọi phân hệ Thanh toán (PAY) để thực hiện trừ tiền hóa đơn doanh nghiệp.
+	+ Giao tiếp với TMS Service: Lấy cấu hình của doanh nghiệp (Tenant config) để áp dụng các quy tắc thanh toán tương ứng.
+	+ Giao tiếp với NCS Service: Phát tín hiệu để hệ thống gửi thông báo (email/webhooks) cho khách hàng khi có hóa đơn mới hoặc khi tài nguyên sắp vượt hạn ngạch.
+	+ Event Streaming: Phát các luồng sự kiện về thanh toán và đo lường lên Kafka để phục vụ phân tích nghiệp vụ (ABI Service).
+
+IV. PAY Service (Payment Processing): Hệ Thống Xử Lý Thanh Toán
+1. Tổng quan:
+- PAY Service là phân hệ tài chính cốt lõi thuộc nhóm Service Provider của VNPT AV Platform. Phân hệ này được thiết kế như một trung tâm quản lý mọi luồng tiền của hệ thống, bao gồm cả thanh toán chuyến đi từ người dùng cuối (B2C) và thanh toán hóa đơn dịch vụ từ các khách hàng doanh nghiệp (B2B).
+- Được xây dựng trên nền tảng Java và Spring Boot, PAY Service đảm bảo tính an toàn, nhất quán và độ tin cậy tuyệt đối cho các giao dịch, đồng thời tích hợp đa dạng các cổng thanh toán trong nước và quốc tế.
+- Mô hình C4: pay-details.png
+2. Chức năng: Phân hệ PAY cung cấp các dịch vụ chuyên sâu về xử lý giao dịch và quản lý rủi ro tài chính:
+- Xử lý thanh toán cốt lõi (Core Payment Processing):
+	+ Định tuyến giao dịch đến các cổng thanh toán phù hợp, hỗ trợ tính phí (charge), ủy quyền (authorize) và ghi nhận giao dịch (capture).
+	+ Tích hợp dịch vụ Escrow (Giữ tiền): Thực hiện tạm giữ tiền (pre-authorize) ngay khi người dùng yêu cầu đặt xe và chỉ chính thức trừ tiền (capture) khi chuyến đi đã hoàn thành.
+- Quản lý Ví điện tử (Wallet Management): Cung cấp hệ thống ví nội bộ cho người dùng, hỗ trợ các thao tác nạp tiền (top-up), kiểm tra số dư và thiết lập nạp tiền tự động.
+- Hoàn tiền & Chi trả (Refund & Payouts):
+	+ Refund: Tự động xử lý hoàn tiền toàn phần hoặc một phần dựa trên các chính sách linh hoạt (ví dụ: tự động hoàn tiền nếu xe tự hành đến trễ quá 10 phút).
+	+ Payout: Quản lý quy trình chi trả doanh thu theo lịch trình (scheduled payouts) cho các đối tác doanh nghiệp dựa trên tỷ lệ chia sẻ doanh thu.
+- Chống gian lận (Fraud Detection): Bảo vệ hệ thống khỏi các giao dịch xấu thông qua cơ chế chấm điểm rủi ro, kết hợp giữa bộ quy tắc cứng (rule-based) và các mô hình học máy (ML fraud scoring).
+- Hỗ trợ đa tiền tệ (Multi-Currency): Tự động chuyển đổi ngoại tệ và hỗ trợ các phương thức thanh toán đặc thù tùy theo từng khu vực địa lý.
+3. Công nghệ:
+- Cổng thanh toán (Gateways): Tích hợp sẵn các adapter kết nối tới Stripe (cho thanh toán thẻ quốc tế), VNPay, VNPT Money, Viettel Money (thanh toán nội địa Việt Nam) và MoMo (ví điện tử),….
+- Lưu trữ & Caching:
+	+ Sử dụng MongoDB để lưu trữ an toàn các bản ghi thanh toán, thông tin thẻ đã được mã hóa (tokenized card data), số dư ví và nhật ký kiểm toán giao dịch (audit trail).
+	+ Sử dụng Redis để lưu trữ tạm thời các phiên thanh toán và cung cấp khóa idempotency giúp ngăn chặn việc trừ tiền trùng lặp.
+- Truyền tải sự kiện: Publish các sự kiện thanh toán và luồng dữ liệu kiểm toán lên Kafka để các phân hệ khác (như BMS, ABI) tiêu thụ.
+- Tương tác với các phân hệ khác:
+	+ RHS Service: Gọi PAY để xử lý thanh toán cước phí ngay sau khi hoàn thành chuyến đi.
+	+ BMS Service: Gọi PAY để tự động trừ tiền hóa đơn dịch vụ định kỳ của các khách hàng doanh nghiệp.
+
+V. TMS Service (Tenant & Organization Management): Hệ Thống Quản Lý Doanh Nghiệp & Tổ Chức
+1. Tổng quan:
+- TMS Service là một trong những phân hệ chính thuộc nhóm Service Provider, đóng vai trò tương tự như dịch vụ AWS Organizations trong hệ sinh thái AV Platform. Phân hệ này chịu trách nhiệm quản lý toàn bộ các khách hàng doanh nghiệp (Tenants/Enterprise Clients) thuê nền tảng.
+- Thay vì chỉ phục vụ một công ty duy nhất, TMS giúp VNPT AV Platform trở thành một nền tảng dịch vụ (PaaS), cho phép các đối tác B2B đăng ký, khởi tạo môi trường độc lập, tùy biến thương hiệu riêng và sử dụng hạ tầng xe tự hành để xây dựng ứng dụng gọi xe của chính họ.
+- Mô hình C4: tms-details.png
+2. Chức năng: Phân hệ TMS cung cấp các tính năng quản lý vòng đời doanh nghiệp và người dùng cuối đa dạng:
+- Tự động hóa Onboarding (Enterprise Onboarding):
+	+ Cung cấp quy trình thiết lập tự động đa bước (multi-step provisioning) cho khách hàng mới, từ việc tạo định danh (tenant_id) đến thiết lập không gian dữ liệu riêng.
+	+ Đóng vai trò "nhạc trưởng" gọi đến các phân hệ khác để chuẩn bị môi trường: gọi SSC để tạo tài khoản Admin và phân quyền (RBAC), gọi BMS để thiết lập gói cước, gọi DPE để sinh API Keys và gọi VMS để phân bổ đội xe.
+- Tùy biến thương hiệu (White-labeling & Branding): Cho phép các doanh nghiệp tùy chỉnh nhận diện thương hiệu của riêng mình trên nền tảng, bao gồm việc tải lên logo, cài đặt bảng màu (color schemes), cấu hình email template và ánh xạ tên miền tùy chỉnh (custom domains).
+- Cô lập dữ liệu & Quản lý hạn mức sử dụng (Data Isolation & Resource Quota):
+	+ Đảm bảo an ninh dữ liệu tuyệt đối giữa các doanh nghiệp (cross-tenant prevention) bằng cách áp dụng cơ chế cô lập dựa trên tenant_id.
+	+ Thực thi các giới hạn tài nguyên (số lượng xe tối đa, lưu lượng API, dung lượng lưu trữ) dựa trên gói dịch vụ mà doanh nghiệp đã mua.
+- Quản lý cấu hình doanh nghiệp (Tenant Config): Quản lý các thiết lập đặc thù và các cờ tính năng (feature flags) riêng biệt cho từng tổ chức.
+- Quản lý định danh hành khách (Rider Identity - B2C): Cung cấp dịch vụ quản lý hồ sơ người dùng cuối (người đặt xe), hỗ trợ đăng ký, đăng nhập qua mạng xã hội (Google, Apple) hoặc xác thực số điện thoại bằng OTP. Chức năng này được tách biệt hoàn toàn khỏi hệ thống quản lý tài khoản vận hành (IAM) của đội xe.
+3. Công nghệ:
+- Ngôn ngữ & Framework: Phân hệ được xây dựng bằng Java và Spring Boot, tuân theo chuẩn kiến trúc Microservices.
+- Lưu trữ (Storage):
+	+ MongoDB: Lưu trữ dữ liệu cấu trúc của tổ chức (org hierarchy), các cấu hình (configs) và hồ sơ người dùng B2C.
+	+ S3/MinIO: Lưu trữ các tài nguyên tĩnh phục vụ white-labeling như hình ảnh logo, theme và các bản build SDK.
+- Caching & Sự kiện:
+	+ Sử dụng Redis để lưu vào bộ nhớ đệm (cache) thông tin ngữ cảnh của tenant và kiểm soát tốc độ truy cập (rate limits).
+	+ Sử dụng Kafka Adapter để phát sóng (publish) các sự kiện liên quan đến vòng đời của doanh nghiệp (ví dụ: tenant mới được tạo, tenant bị đình chỉ) cho các phân hệ khác nắm bắt.
+- Xác thực và phân quyền: Có thể tự xây dựng hoặc tích hợp với nền tảng xác thực và phân quyền tập trung sử dụng côn nghệ Keycloak (phiên bản 26 trở lên)
+
+VI. NCS Service (Notification & Communication): Hệ Thống Giao Tiếp & Thông Báo
+1. Tổng quan:
+- NCS Service là phân hệ giao tiếp chính thuộc nhóm Service Provider của hệ thống AV Platform. Đóng vai trò là trung tâm phát luồng thông báo đa kênh (omnichannel), chịu trách nhiệm truyền tải các cập nhật thời gian thực, cảnh báo và tin nhắn đến cả người dùng cuối (hành khách) lẫn các khách hàng doanh nghiệp.
+- Được xây dựng bằng ngôn ngữ Java và framework Spring Boot, NCS Service đảm bảo mọi thông tin từ hệ thống xe tự hành (ví dụ: "Xe đang đến", "Hoàn thành chuyến đi", "Cảnh báo an toàn") đều được gửi đi một cách nhanh chóng, tin cậy và đúng kênh.
+- Mô hình C4: ncs-details.png
+2. Chức năng: NCS Service được thiết kế để xử lý linh hoạt khối lượng lớn thông báo với các tính năng nghiệp vụ nổi bật:
+- Quản lý và định tuyến đa kênh (Multi-channel Routing):
+	+ Hỗ trợ gửi thông báo qua đa dạng các kênh: Push Notification (iOS/Android), SMS, Email, In-app và Webhooks.
+	+ Hệ thống có khả năng tự động xác định kênh gửi tốt nhất dựa trên loại sự kiện và mức độ ưu tiên. Ví dụ: Cảnh báo an toàn (Safety alert) có mức độ ưu tiên là Critical sẽ được "bắn" qua cả Push Notification (iOS/Android) và SMS để đảm bảo người nhận đọc được ngay lập tức, trong khi biên lai thanh toán có mức độ ưu tiên là Medium chỉ cần gửi qua Email và Push Notification (iOS/Android).
+- Quản lý mẫu thông báo (Template Engine):
+	+ Cho phép khởi tạo và quản lý nội dung linh hoạt (CRUD templates), hỗ trợ đa ngôn ngữ (i18n) để phục vụ khách hàng quốc tế.
+	+ Tự động thay thế các biến số động vào mẫu tin (variable substitution) và hỗ trợ thử nghiệm A/B (A/B testing) để tối ưu hóa nội dung tiếp cận.
+- Tùy chọn & Cá nhân hóa (User Preferences): Tôn trọng trải nghiệm người dùng bằng cách cho phép họ cài đặt quyền riêng tư: chọn kênh muốn nhận (opt-in/out), cài đặt giờ yên tĩnh (quiet hours) để không bị làm phiền, và giới hạn tần suất nhận thông báo (frequency caps).
+- Đảm bảo phân phối (Reliable Delivery):
+	+ Áp dụng các cơ chế chống gửi lỗi như thử lại với độ trễ tăng dần (exponential backoff) nếu dịch vụ gửi tin nhắn / thông báo của bên thứ 3 gặp sự cố.
+	+ Đưa các tin nhắn lỗi không thể khắc phục sau khi thử lại vào hàng đợi dead letter queue để đội ngũ kỹ thuật điều tra sau.
+- Dịch vụ Webhooks cho Doanh nghiệp:
+	+ Cho phép các đối tác B2B đăng ký theo dõi các sự kiện của nền tảng (như: chuyến đi hoàn tất, thanh toán thành công) thông qua cơ chế Event Subscription.
+	+ Đảm bảo tính bảo mật bằng cách xác thực chữ ký (signature verification) khi đẩy dữ liệu về hệ thống (endpoint) của khách hàng doanh nghiệp.
+3. Công nghệ:
+- Tích hợp (Adapters): NCS Service cắm sẵn các kết nối tới các dịch vụ giao tiếp hàng đầu thế giới bao gồm: Firebase (gửi Push Notification qua FCM/APNs), SendGrid (gửi Email giao dịch) và Twilio (gửi SMS/Mã OTP), hoặc các nền tảng khác tương đương.
+- Hạ tầng dữ liệu:
+	+ Sử dụng MongoDB để lưu lại nhật ký phát thông báo (delivery status), cấu hình webhook và các mẫu tin.
+	+ Sử dụng Kafka làm hàng đợi xử lý sự kiện bất đồng bộ với thông lượng cao.
+	+ Sử dụng Redis để lưu vào bộ đệm, hỗ trợ kiểm soát lưu lượng (rate limiting) và loại bỏ các thông báo gửi trùng (delivery dedup).
+- Tương tác với các phân hệ khác:
+	+ RHS (Đặt xe): Nhận sự kiện để báo cho hành khách biết ETA (thời gian xe đến), xe đã tới điểm đón hoặc khi hoàn tất chuyến.
+	+ BMS (Thanh toán doanh nghiệp): Phát email hóa đơn định kỳ hoặc cảnh báo khi API của doanh nghiệp chạm trần hạn mức.
+	+ Alert Engine: Tiếp nhận các thông báo khẩn cấp (như xe gặp sự cố) để nhắn tin ngay cho Giám sát viên an toàn (Safety Monitor).
+
+VII. ABI Service (Analytics & Business Intelligence): Hệ Thống Phân Tích & Kinh Doanh Thông Minh
+1. Tổng quan: 
+- ABI Service là phân hệ phân tích dữ liệu chính thuộc nhóm Service Provider của hệ thống VNPT AV Platform. Phân hệ này đóng vai trò là hệ thống thống kê và báo cáo tập trung của nền tảng, hoạt động tương tự như sự kết hợp giữa Google Analytics (để phân tích lưu lượng, hành vi) và AWS Cost Explorer (để phân tích chi phí, doanh thu).
+- Nhiệm vụ chính của ABI Service là thu thập, tổng hợp các luồng sự kiện từ toàn bộ hệ thống (như chuyến đi, thanh toán, thông báo) để biến chúng thành những thông tin chi tiết (insights) có giá trị, giúp ban quản trị và các khách hàng doanh nghiệp (Tenants) đưa ra quyết định dựa trên dữ liệu (Data-driven).
+- Mô hình C4: abi-details.png
+2. Chức năng: Phân hệ ABI cung cấp các nhóm chức năng chuyên sâu về xử lý dữ liệu lớn và báo cáo:
+- Quản lý Bảng điều khiển & Giám sát KPI (Dashboards & KPIs):
+	+ Cung cấp các bảng điều khiển thời gian thực (real-time dashboards) với khả năng tùy chỉnh widget cho từng người dùng hoặc doanh nghiệp.
+	+ Theo dõi sát sao các chỉ số hiệu suất trọng yếu (KPIs) của đội xe tự hành, và tự động cảnh báo khi các chỉ số này vi phạm ngưỡng an toàn (threshold breaches). Các KPI mục tiêu bao gồm:
+		o Average ETA Accuracy: Độ chính xác của thời gian dự kiến đến (chênh lệch < 2 phút).
+		o Ride Completion Rate: Tỷ lệ hoàn thành chuyến đi (> 95%).
+		o Average Wait Time: Thời gian khách hàng phải chờ xe (< 5 phút).
+		o Fleet Utilization: Hiệu suất khai thác đội xe (> 70% xe đang chạy chuyến).
+		o Safety Intervention Rate: Tỷ lệ vận hành viên phải can thiệp an toàn từ xa (< 1 lần/1000 chuyến).
+- Phân tích Nhu cầu & Doanh thu (Demand & Revenue Analytics):
+	+ Nhu cầu (Demand): Phân tích dữ liệu để tạo ra các bản đồ nhiệt (Heatmaps) thể hiện khu vực có nhu cầu đặt xe cao, phát hiện các quy luật theo mùa vụ (seasonal patterns) hoặc theo khung giờ.
+	+ Doanh thu (Revenue): Phân tích xu hướng doanh thu chi tiết theo từng khách hàng doanh nghiệp, theo khu vực địa lý, hoặc theo từng loại xe (vehicle-type).
+- Báo cáo Tuân thủ & Quy định (Regulatory Reporting): Tự động sinh các báo cáo chuyên dụng để nộp cho cơ quan chức năng hoặc chính phủ. Các báo cáo này bao gồm dữ liệu về an toàn vận hành, mức độ tiếp cận dịch vụ (accessibility) và lượng khí thải (emissions).
+- Tổng hợp dữ liệu (ETL) & Trích xuất (Export):
+	+ Cung cấp quy trình ETL (Extract, Transform, Load) để gom cụm dữ liệu thô thành các dạng dữ liệu sẵn sàng cho phân tích (Data Aggregation).
+	+ Hỗ trợ xuất báo cáo linh hoạt ra các định dạng PDF, CSV hoặc qua API, đồng thời có thể đặt lịch gửi báo cáo tự động (hàng ngày/tuần/tháng).
+3. Công nghệ:
+- Ngôn ngữ & Framework: ABI Service được xây dựng bằng Java và Spring Boot, tận dụng công cụ Spring Batch để xử lý các tác vụ gom cụm dữ liệu và tạo báo cáo định kỳ quy mô lớn.
+- Cơ sở dữ liệu & Phân tích:
+	+ Sử dụng Elasticsearch để thực hiện các truy vấn phân tích phức tạp, tổng hợp dữ liệu (aggregations) và tìm kiếm toàn văn.
+	+ Sử dụng InfluxDB để lưu trữ và phân tích các xu hướng dữ liệu dạng chuỗi thời gian (time-series), đặc biệt là luồng nhu cầu và doanh thu theo thời gian.
+	+ Sử dụng MongoDB để lưu trữ các định nghĩa báo cáo (report definitions) và bản báo cáo đã xuất.
+	+ Sử dụng MinIO (S3) để lưu trữ các tập tin báo cáo PDF/CSV sau khi được tạo ra.
+- Tương tác luồng dữ liệu:
+	+ Lắng nghe các sự kiện (events) liên tục từ Kafka bao gồm: chuyến đi (ride-events từ RHS), thanh toán (payment-events từ PAY), và hóa đơn (billing-events từ BMS).
+	+ Trực tiếp truy xuất dữ liệu chuyến đi từ RHS Service và dữ liệu doanh thu từ BMS Service để đưa lên Dashboard.
+
+VIII. MKP Service (Marketplace & Integration Hub): Hệ Sinh Thái Tích Hợp & Chợ Ứng Dụng
+1. Tổng quan:
+- MKP Service là phân hệ cuối cùng thuộc nhóm Service Provider của hệ thống VNPT AV Platform. Phân hệ này hoạt động với vai trò tương tự như AWS Marketplace, biến VNPT AV Platform từ một hệ thống đóng thành một hệ sinh thái mở. Nó cho phép các khách hàng doanh nghiệp (Tenants) đang thuê nền tảng có thể dễ dàng tìm kiếm, mua và cài đặt các dịch vụ mở rộng từ các đối tác bên thứ 3 (3rd Party Partners) để tùy biến ứng dụng gọi xe của riêng họ.
+- Mô hình C4: mkp-details.png
+2. Chức năng: Phân hệ MKP cung cấp các tính năng quản lý vòng đời tích hợp cho cả nhà cung cấp (Partners) và người sử dụng (Tenants):
+- Quản lý Danh mục & Plugin (Catalog & Plugin Management):
+	+ Cung cấp một "chợ ứng dụng" nơi doanh nghiệp có thể duyệt, tìm kiếm và cài đặt/gỡ cài đặt các tiện ích tích hợp.
+	+ Cho phép từng khách hàng doanh nghiệp cấu hình và bật/tắt các plugin một cách độc lập trong không gian (tenant) của họ.
+- Quản lý Đối tác & Kiểm định (Partner & Certification Service):
+	+ Quản lý toàn bộ vòng đời của đối tác từ khâu đăng ký, ký kết thỏa thuận đến theo dõi hiệu suất.
+	+ Đóng vai trò "người gác cổng" thông qua Certification Service, thực hiện đánh giá bảo mật và kiểm thử hiệu năng trước khi cho phép một ứng dụng của đối tác xuất hiện trên Marketplace.
+- Các Đầu nối Tích hợp sẵn (Pre-built Connectors): Cung cấp sẵn các module kết nối tới các lĩnh vực thiết yếu như: bảo hiểm (Insurance), hỗ trợ tiếp cận (Accessibility), công tác doanh nghiệp (Corporate travel) và các đối tác khách sạn.
+- Chia sẻ Doanh thu (Revenue Share): Tự động tính toán hoa hồng cho nền tảng (Platform commission) và quản lý việc chi trả (payouts) doanh thu cho các đối tác dựa trên cấu hình linh hoạt.
+3. Các danh mục tích hợp tiêu biểu (Marketplace Categories): Hệ sinh thái MKP hỗ trợ đa dạng các loại hình đối tác:
+- Bảo hiểm (Insurance): Cung cấp các gói bảo hiểm theo từng chuyến đi (Per-ride insurance) hoặc bảo hiểm trách nhiệm. Tích hợp thông qua cơ chế Webhook khi sự kiện chuyến đi bắt đầu (ride.started).
+- Hỗ trợ tiếp cận (Accessibility): Các plugin mở rộng chức năng đặt xe cho người dùng xe lăn hoặc người khiếm thính, tích hợp trực tiếp vào module ghép xe của hệ thống.
+- Du lịch & Công tác (Corporate Travel): Kết nối dữ liệu với các nền tảng quản lý chi phí doanh nghiệp lớn như SAP Concur hoặc TripActions thông qua OAuth và API.
+- Bản đồ & Phân tích (Mapping & Analytics): Cho phép doanh nghiệp mua thêm các nhà cung cấp bản đồ tùy chỉnh (hoặc bản đồ trong nhà - indoor mapping) và các công cụ BI nội bộ (Custom BI tools) để xuất dữ liệu.
+4. Công nghệ:
+- Ngôn ngữ & Framework: Phân hệ được xây dựng bằng Java và Spring Boot.
+- Cơ sở dữ liệu & Lưu trữ:
+	+ Sử dụng MongoDB để lưu trữ danh mục ứng dụng (Catalog), dữ liệu đối tác, các hợp đồng và cấu hình plugin của từng doanh nghiệp.
+	+ Sử dụng S3/MinIO để lưu trữ các gói cài đặt plugin và tài liệu kỹ thuật.
+	+ Sử dụng Redis để lưu vào bộ nhớ đệm (cache) danh mục marketplace, giúp tải trang siêu tốc.
+- Tương tác với phân hệ khác:
+	+ TMS Service: MKP gọi TMS để quản lý việc kích hoạt plugin áp dụng cho từng tenant cụ thể.
+	+ DPE Service: Tương tác với Nền tảng Nhà phát triển để cấu hình các luồng API tích hợp cho đối tác.
+	+ PAY Service: MKP gọi PAY để thực hiện quy trình chi trả tiền hoa hồng (payouts) cho các đối tác trên chợ ứng dụng. Đồng thời các nhà cung cấp cổng thanh toán khu vực cũng có thể tích hợp vào PAY thông qua MKP.

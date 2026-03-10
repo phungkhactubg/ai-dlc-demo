@@ -1,0 +1,23 @@
+# Development profile — local defaults, verbose logging
+spring:
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/av_platform_dev
+    redis:
+      host: localhost
+      port: 6379
+  kafka:
+    bootstrap-servers: localhost:9092
+
+nats:
+  server-url: nats://localhost:4222
+
+security:
+  jwt:
+    secret: rhs-dev-secret-key-not-for-production-use-32b
+
+logging:
+  level:
+    com.vnpt.avplatform: DEBUG
+    org.springframework.kafka: DEBUG
+    io.nats: DEBUG
