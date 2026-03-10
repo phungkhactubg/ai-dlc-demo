@@ -1,0 +1,20 @@
+# Maven
+target/
+*.class
+
+# Node
+node_modules/
+dist/
+
+# OS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Project specific
+.claude/
+.gemini/

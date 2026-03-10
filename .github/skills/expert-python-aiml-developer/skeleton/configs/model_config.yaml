@@ -1,0 +1,12 @@
+# Model configuration
+model:
+  name: "efficientnet_b0"
+  num_classes: 10
+  image_size: 224
+  pretrained: true
+  dropout: 0.2
+  
+# Architecture settings
+architecture:
+  backbone: "efficientnet_b0"
+  freeze_backbone: false

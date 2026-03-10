@@ -1,0 +1,47 @@
+# Training configuration
+training:
+  seed: 42
+  epochs: 100
+  batch_size: 32
+  learning_rate: 0.0001
+  weight_decay: 0.01
+  gradient_clip: 1.0
+
+# Optimizer
+optimizer:
+  name: "adamw"
+  betas: [0.9, 0.999]
+  eps: 1.0e-8
+
+# Scheduler
+scheduler:
+  name: "cosine"
+  min_lr: 1.0e-6
+  warmup_epochs: 5
+
+# Checkpointing
+checkpoint:
+  save_every: 5
+  keep_last: 3
+  save_best: true
+  monitor: "val_loss"
+  mode: "min"
+
+# Early stopping
+early_stopping:
+  patience: 10
+  min_delta: 0.001
+
+# Data
+data:
+  train_dir: "data/processed/train"
+  val_dir: "data/processed/val"
+  num_workers: 4
+  pin_memory: true
+
+# Augmentation
+augmentation:
+  level: "medium"
+  horizontal_flip: true
+  vertical_flip: false
+  rotation: 30

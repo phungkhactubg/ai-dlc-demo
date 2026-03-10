@@ -1,0 +1,20 @@
+# Inference configuration
+inference:
+  batch_size: 64
+  device: "cuda"
+  precision: "fp32"
+  
+# Model
+model:
+  path: "models/production/model.pt"
+  version: "1.0.0"
+
+# Thresholds
+thresholds:
+  confidence: 0.5
+  top_k: 5
+
+# API settings
+api:
+  timeout: 30
+  max_batch_size: 100
